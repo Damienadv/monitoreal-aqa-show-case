@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Monitoreal Mock UI{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body>
+    {% if role %}
+      <header class="topbar">
+        <a href="/rules" class="brand">Monitoreal Mock UI</a>
+        <nav>
+          <a href="/rules">Rules</a>
+          <a href="/archive">Archive</a>
+        </nav>
+        <span class="role" data-testid="role">role: {{ role }}</span>
+      </header>
+    {% endif %}
+    <main>{% block content %}{% endblock %}</main>
+  </body>
+</html>

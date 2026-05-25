@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Rules — Monitoreal Mock UI{% endblock %}
+{% block content %}
+<section class="page rules">
+  <header class="page-head">
+    <h1>Rules</h1>
+    <button id="open-modal" data-testid="open-create-modal">Create rule</button>
+  </header>
+
+  <table data-testid="rules-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Camera</th>
+        <th>Object</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rule in rules %}
+        <tr data-testid="rule-row" data-rule-id="{{ rule.id }}">
+          <td>{{ rule.name }}</td>
+          <td>{{ rule.camera_id }}</td>
+          <td>{{ rule.object_type }}</td>
+          <td>{{ rule.actions | length }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <dialog id="create-modal" data-testid="create-modal">
+    <form id="create-form" data-testid="create-form">
+      <h2>Create rule</h2>
+      <label>Name <input name="name" required data-testid="field-name" /></label>
+      <label>
+        Camera id
+        <input name="camera_id" required value="cam-01" data-testid="field-camera" />
+      </label>
+      <label>
+        Object type
+        <select name="object_type" data-testid="field-object-type">
+          <option>person</option>
+          <option>vehicle</option>
+          <option>animal</option>
+          <option>unknown</option>
+        </select>
+      </label>
+      <label>
+        Mode
+        <select name="action_mode" data-testid="field-mode">
+          <option value="sequential">sequential</option>
+          <option value="parallel">parallel</option>
+        </select>
+      </label>
+      <label>
+        Action type
+        <select name="action_type" data-testid="field-action-type">
+          <option>relay</option>
+          <option>audio</option>
+          <option>mobile_push</option>
+          <option>webhook</option>
+        </select>
+      </label>
+      <p class="form-error" data-testid="form-error" hidden></p>
+      <div class="actions">
+        <button type="button" id="cancel" data-testid="cancel">Cancel</button>
+        <button type="submit" data-testid="submit">Create</button>
+      </div>
+    </form>
+  </dialog>
+</section>
+
+<script>
+  const apiKey = "{{ api_key }}";
+  const modal = document.getElementById("create-modal");
+  document.getElementById("open-modal").addEventListener("click", () => modal.showModal());
+  document.getElementById("cancel").addEventListener("click", () => modal.close());
+
+  document.getElementById("create-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      name: fd.get("name"),
+      camera_id: fd.get("camera_id"),
+      object_type: fd.get("object_type"),
+      action_mode: fd.get("action_mode"),
+      threshold: 0.7,
+      actions: [{ type: fd.get("action_type"), order_index: 0 }],
+    };
+    const errEl = document.querySelector('[data-testid="form-error"]');
+    errEl.hidden = true;
+    const res = await fetch("/api/v1/rules", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      errEl.textContent = body.detail || "Create failed";
+      errEl.hidden = false;
+      return;
+    }
+    location.reload();
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,143 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ---- Virtualenvs ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- uv ----
+.uv/
+# Note: uv.lock IS committed (reproducibility)
+
+# ---- pytest / coverage ----
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ---- mypy / ruff ----
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# ---- Allure / Playwright ----
+allure-results/
+allure-report/
+.allure/
+playwright-report/
+test-results/
+node_modules/
+
+# ---- IDE / editors ----
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# ---- Env / secrets ----
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*_secret*
+
+# ---- Mock DB / runtime data ----
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+
+# ---- Reports artifacts (keep .md, ignore raw) ----
+reports/*.html
+reports/*.json
+reports/*.csv
+!reports/.gitkeep
+
+# ---- Logs ----
+logs/
+*.log
+
+# ---- Docker volume bind dirs (if any) ----
+.docker/
+
+# ---- OS junk ----
+.AppleDouble
+.LSOverride
+Icon?
+ehthumbs.db
+desktop.ini
+
+# ---- Agent / scratch context (local-only, never tracked) ----
+CLAUDE.md
+CLAUDE_CODE_GUIDE.md
+chatgpt-discussion.md
+*chatgpt*.md
+.claude/
+
+# ---- Internal planning docs (local-only) ----
+docs/PRD.md
+docs/STRATEGIC_PLAN.md
+docs/IMPLEMENTATION_PLAN.md
+docs/PROJECT_ARCHITECTURE.md
+docs/cover_letter.md
+
+# ---- Scratch / personal notes ----
+notes.md
+TODO.md
+*.draft.md
+*.scratch.md
+scratch/
+tmp/
+
+# ---- Other AI assistants / IDE configs ----
+.aider*
+.cursor/
+.continue/
+.windsurf/
+.codeium/
+.copilot/
+
+# ---- Environment manager fragments ----
+.envrc
+.python-version
+.tool-versions
+
+# ---- Misc ----
+*.bak
+*.tmp
+*.swp
+*.swo
+*~

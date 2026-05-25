@@ -1,0 +1,578 @@
+openapi: 3.1.0
+info:
+  title: Monitoreal Mock API
+  version: 1.0.0
+  description: |
+    Mock API для AQA-шоукейса под домен Edge AI video surveillance.
+    Не клон Monitoreal — имитация платформы того же класса.
+
+    Источник правды: этот файл. Реализация на FastAPI должна соответствовать
+    каждому полю и коду ответа.
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Локальный mock-сервер
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: system
+    description: Служебные эндпоинты (health, без auth)
+  - name: detections
+    description: Приём событий детекции от камер
+  - name: rules
+    description: CRUD правил с действиями
+  - name: actions
+    description: Тестовый запуск действий
+  - name: archive
+    description: Архив событий с пагинацией
+  - name: media
+    description: Retention медиа (admin)
+  - name: cameras
+    description: Камеры (read-only)
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Health check
+      description: Без auth. Используется Docker healthcheck и CI smoke.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, example: "ok" }
+
+  /api/v1/cameras:
+    get:
+      tags: [cameras]
+      operationId: listCameras
+      summary: Список камер
+      responses:
+        "200":
+          description: Список камер
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Camera" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/detections:
+    post:
+      tags: [detections]
+      operationId: createDetection
+      summary: Принять detection event от камеры
+      description: |
+        Идемпотентно по `(external_id, camera_id)`. При повторе того же
+        `external_id` возвращает 200 (а не 201) и существующие id'шники.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DetectionEventCreate" }
+            examples:
+              person_in_roi:
+                summary: Человек в ROI после 22:00
+                value:
+                  external_id: "evt-001"
+                  camera_id: "cam-01"
+                  object_type: "person"
+                  confidence: 0.92
+                  bbox: [100, 200, 50, 80]
+                  occurred_at: "2026-05-25T22:15:00Z"
+      responses:
+        "201":
+          description: Новое событие создано, правила сматчены
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DetectionAccepted" }
+        "200":
+          description: Дубликат (idempotency hit) — возвращены существующие id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DetectionAccepted" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/events:
+    get:
+      tags: [detections]
+      operationId: listEvents
+      summary: Список alert events
+      parameters:
+        - { in: query, name: camera_id, schema: { type: string }, required: false }
+        - { in: query, name: status, schema: { $ref: "#/components/schemas/AlertStatus" }, required: false }
+        - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
+        - { in: query, name: per_page, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: Список с пагинацией
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, per_page]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AlertEvent" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  per_page: { type: integer }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/rules:
+    post:
+      tags: [rules]
+      operationId: createRule
+      summary: Создать правило
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RuleCreate" }
+            examples:
+              person_after_22:
+                summary: Человек после 22:00 с двумя действиями
+                value:
+                  name: "Person after 22:00"
+                  camera_id: "cam-01"
+                  object_type: "person"
+                  roi_polygon: [[0,0],[1920,0],[1920,1080],[0,1080]]
+                  schedule_cron: "0 22-23 * * *"
+                  threshold: 0.7
+                  action_mode: "sequential"
+                  actions:
+                    - { type: "relay", order_index: 0, config: { relay_id: 1 } }
+                    - { type: "audio", order_index: 1, config: { sound: "alarm.wav" } }
+      responses:
+        "201":
+          description: Правило создано
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rule" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/rules/{rule_id}:
+    parameters:
+      - { in: path, name: rule_id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [rules]
+      operationId: getRule
+      summary: Получить правило по id
+      responses:
+        "200":
+          description: Правило
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rule" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [rules]
+      operationId: updateRule
+      summary: Обновить правило
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RuleUpdate" }
+      responses:
+        "200":
+          description: Обновлено
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rule" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    delete:
+      tags: [rules]
+      operationId: deleteRule
+      summary: Удалить правило (cascade actions)
+      responses:
+        "204":
+          description: Удалено
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/actions/test:
+    post:
+      tags: [actions]
+      operationId: testActions
+      summary: Тестовый запуск действия по существующему правилу
+      description: Запускает action chain правила без создания alert-event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule_id]
+              properties:
+                rule_id: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Действия выполнены
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rule_id, actions_executed]
+                properties:
+                  rule_id: { type: string, format: uuid }
+                  actions_executed:
+                    type: array
+                    items: { $ref: "#/components/schemas/AlertActionExecuted" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/archive:
+    get:
+      tags: [archive]
+      operationId: listArchive
+      summary: Архив событий с фильтрами и пагинацией
+      parameters:
+        - { in: query, name: camera_id, schema: { type: string }, required: false }
+        - { in: query, name: object_type, schema: { $ref: "#/components/schemas/ObjectType" }, required: false }
+        - { in: query, name: from, schema: { type: string, format: date-time }, required: false }
+        - { in: query, name: to, schema: { type: string, format: date-time }, required: false }
+        - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
+        - { in: query, name: per_page, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: Архив (paginated)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginatedArchive" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/media/expired:
+    delete:
+      tags: [media]
+      operationId: deleteExpiredMedia
+      summary: Удалить просроченные media (retention)
+      description: Доступно только admin-роли.
+      responses:
+        "200":
+          description: Удалено
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted_count]
+                properties:
+                  deleted_count: { type: integer, minimum: 0 }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  responses:
+    BadRequest:
+      description: Невалидный запрос
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+    Unauthorized:
+      description: Нет или неверный API-key
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+    Forbidden:
+      description: Недостаточно прав для роли
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+    Conflict:
+      description: Конфликт уникальности
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+    UnprocessableEntity:
+      description: Pydantic-валидация не прошла
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+
+  schemas:
+    ObjectType:
+      type: string
+      enum: [person, vehicle, animal, unknown]
+      description: Тип распознанного объекта
+
+    ActionType:
+      type: string
+      enum: [relay, audio, mobile_push, webhook]
+
+    ActionMode:
+      type: string
+      enum: [parallel, sequential]
+
+    AlertStatus:
+      type: string
+      enum: [pending, processing, done, failed]
+
+    Camera:
+      type: object
+      required: [id, code, name, is_active, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, example: "cam-01" }
+        name: { type: string, example: "Front door" }
+        location:
+          type: [string, "null"]
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    ActionConfig:
+      type: object
+      additionalProperties: true
+      description: |
+        Полезная нагрузка действия. Свободная форма по `type`:
+        relay → `relay_id`; audio → `sound`; webhook → `url`; mobile_push → `device_id`.
+
+    Action:
+      type: object
+      required: [id, type, order_index]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: "#/components/schemas/ActionType" }
+        order_index: { type: integer, minimum: 0 }
+        config: { $ref: "#/components/schemas/ActionConfig" }
+
+    ActionCreate:
+      type: object
+      required: [type, order_index]
+      properties:
+        type: { $ref: "#/components/schemas/ActionType" }
+        order_index: { type: integer, minimum: 0 }
+        config: { $ref: "#/components/schemas/ActionConfig" }
+
+    Rule:
+      type: object
+      required: [id, name, camera_id, object_type, threshold, is_enabled, action_mode, actions, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        camera_id: { type: string }
+        object_type: { $ref: "#/components/schemas/ObjectType" }
+        roi_polygon:
+          type: [array, "null"]
+          items:
+            type: array
+            items: { type: number }
+            minItems: 2
+            maxItems: 2
+        schedule_cron:
+          type: [string, "null"]
+          example: "0 22-23 * * *"
+        threshold: { type: number, minimum: 0, maximum: 1 }
+        is_enabled: { type: boolean }
+        action_mode: { $ref: "#/components/schemas/ActionMode" }
+        actions:
+          type: array
+          items: { $ref: "#/components/schemas/Action" }
+          minItems: 1
+        created_at: { type: string, format: date-time }
+
+    RuleCreate:
+      type: object
+      required: [name, camera_id, object_type, threshold, action_mode, actions]
+      properties:
+        name: { type: string }
+        camera_id: { type: string }
+        object_type: { $ref: "#/components/schemas/ObjectType" }
+        roi_polygon:
+          type: array
+          items:
+            type: array
+            items: { type: number }
+        schedule_cron: { type: string }
+        threshold: { type: number, minimum: 0, maximum: 1, default: 0.7 }
+        action_mode: { $ref: "#/components/schemas/ActionMode" }
+        actions:
+          type: array
+          items: { $ref: "#/components/schemas/ActionCreate" }
+          minItems: 1
+
+    RuleUpdate:
+      type: object
+      description: Частичное обновление правила.
+      properties:
+        name: { type: string }
+        object_type: { $ref: "#/components/schemas/ObjectType" }
+        roi_polygon:
+          type: array
+          items:
+            type: array
+            items: { type: number }
+        schedule_cron: { type: string }
+        threshold: { type: number, minimum: 0, maximum: 1 }
+        is_enabled: { type: boolean }
+        action_mode: { $ref: "#/components/schemas/ActionMode" }
+
+    DetectionEvent:
+      type: object
+      required: [id, external_id, camera_id, object_type, confidence, occurred_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        external_id: { type: string }
+        camera_id: { type: string }
+        object_type: { $ref: "#/components/schemas/ObjectType" }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        bbox:
+          type: [array, "null"]
+          items: { type: integer }
+          minItems: 4
+          maxItems: 4
+        occurred_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    DetectionEventCreate:
+      type: object
+      required: [external_id, camera_id, object_type, confidence, occurred_at]
+      properties:
+        external_id: { type: string, minLength: 1 }
+        camera_id: { type: string, minLength: 1 }
+        object_type: { $ref: "#/components/schemas/ObjectType" }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        bbox:
+          type: array
+          items: { type: integer }
+          minItems: 4
+          maxItems: 4
+        occurred_at: { type: string, format: date-time }
+
+    DetectionAccepted:
+      type: object
+      required: [detection_event_id, matched_rule_ids, alert_event_ids, duplicate]
+      properties:
+        detection_event_id: { type: string, format: uuid }
+        matched_rule_ids:
+          type: array
+          items: { type: string, format: uuid }
+        alert_event_ids:
+          type: array
+          items: { type: string, format: uuid }
+        duplicate:
+          type: boolean
+          description: true, если этот external_id уже принимали (idempotency hit)
+
+    AlertActionExecuted:
+      type: object
+      required: [action_id, status, executed_at]
+      properties:
+        action_id: { type: string, format: uuid }
+        type: { $ref: "#/components/schemas/ActionType" }
+        status: { type: string, enum: [done, failed, skipped] }
+        executed_at: { type: string, format: date-time }
+        error:
+          type: [string, "null"]
+
+    AlertEvent:
+      type: object
+      required: [id, detection_event_id, rule_id, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        detection_event_id: { type: string, format: uuid }
+        rule_id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/AlertStatus" }
+        actions_executed:
+          type: array
+          items: { $ref: "#/components/schemas/AlertActionExecuted" }
+        created_at: { type: string, format: date-time }
+
+    ArchiveItem:
+      type: object
+      required: [id, alert_event_id, camera_id, expires_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        alert_event_id: { type: string, format: uuid }
+        camera_id: { type: string }
+        snapshot_url:
+          type: [string, "null"]
+        meta:
+          type: object
+          additionalProperties: true
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    PaginatedArchive:
+      type: object
+      required: [items, total, page, per_page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ArchiveItem" }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        per_page: { type: integer, minimum: 1 }
+
+    ProblemDetail:
+      description: RFC 7807 Problem Details
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri, example: "https://example.com/errors/validation" }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }

@@ -1,0 +1,87 @@
+[project]
+name = "monitoreal-aqa-show-case"
+version = "0.1.0"
+description = "AQA showcase project for Edge AI video surveillance domain"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [
+    { name = "Dmitriy Andropov" },
+]
+
+dependencies = [
+    "fastapi>=0.115,<0.116",
+    "uvicorn[standard]>=0.32,<0.33",
+    "sqlalchemy>=2.0,<2.1",
+    "aiosqlite>=0.20,<0.21",
+    "pydantic>=2.9,<3",
+    "pydantic-settings>=2.6,<3",
+    "croniter>=3.0,<4",
+    "jinja2>=3.1,<4",
+    "python-multipart>=0.0.12,<0.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.24,<0.25",
+    "httpx>=0.27,<0.29",
+    "schemathesis>=3.36,<4",
+    "playwright>=1.48,<2",
+    "ruff>=0.7,<0.10",
+    "mypy>=1.13,<2",
+    "pre-commit>=4.0,<5",
+    "allure-pytest>=2.13,<3",
+    "pytest-html>=4.1,<5",
+    "factory-boy>=3.3,<4",
+    "pyyaml>=6.0,<7",
+    "types-pyyaml>=6.0,<7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mock_server"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# RUF001/2/3 — ambiguous Unicode: ложно-положительные на кириллице, проект многоязычный.
+ignore = ["E501", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "SIM117"]
+# B008: FastAPI Depends() в default аргументах — идиоматично.
+"src/mock_server/routers/*" = ["B008"]
+"src/mock_server/auth.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "api: API regression tests",
+    "contract: contract tests",
+    "ui: UI smoke tests",
+    "e2e: end-to-end tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:websockets",
+    "ignore::DeprecationWarning:uvicorn",
+]

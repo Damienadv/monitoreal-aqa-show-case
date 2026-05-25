@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Archive — Monitoreal Mock UI{% endblock %}
+{% block content %}
+<section class="page archive">
+  <h1>Archive</h1>
+  <form method="get" action="/archive" class="filters" data-testid="filters">
+    <label>
+      Camera id
+      <input name="camera_id" value="{{ camera_id or '' }}" data-testid="filter-camera" />
+    </label>
+    <label>
+      Object type
+      <select name="object_type" data-testid="filter-object">
+        <option value="">— any —</option>
+        {% for opt in ["person", "vehicle", "animal", "unknown"] %}
+          <option value="{{ opt }}" {% if opt == object_type %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" data-testid="apply-filter">Apply</button>
+  </form>
+
+  <table data-testid="archive-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Camera</th>
+        <th>Created</th>
+        <th>Expires</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+        <tr data-testid="archive-row" data-archive-id="{{ item.id }}">
+          <td>{{ item.id[:8] }}</td>
+          <td>{{ item.camera_id }}</td>
+          <td>{{ item.created_at }}</td>
+          <td>{{ item.expires_at }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p data-testid="total">total: {{ total }}</p>
+</section>
+{% endblock %}
